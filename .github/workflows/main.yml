@@ -2,18 +2,25 @@ name: RSD snapshot to repo
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # každých 5 minut (UTC)
-  workflow_dispatch:        # ruční spuštění
+    - cron: "*/5 * * * *"   # každých 5 min (UTC)
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+# Zamezí souběžným běhům, které by si šlapaly po commitech
+concurrency:
+  group: rsd-snapshot-main
+  cancel-in-progress: false
 
 jobs:
   snapshot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout repo (full history)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,14 +36,23 @@ jobs:
           RSD_PASSWORD: ${{ secrets.RSD_PASSWORD }}
           RSD_URL: https://cloud.ostrava.cz/public.php/webdav/upload.xml
           OUT_DIR: data
-          SOFT_FAIL: "true"   # měkké selhání při výpadku
+          SOFT_FAIL: "true"
         run: python -u fetch_rsd.py
 
-
-      - name: Commit & push
+      - name: Commit, rebase & push
         run: |
+          set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add -A
           git commit -m "snapshot: $(date -u +%FT%TZ)" || echo "No changes to commit"
-          git push
+
+          BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+          # stáhni změny a přehraj náš commit navrch
+          git pull --rebase origin "$BRANCH" || (git rebase --abort; echo "Rebase failed, trying safe push anyway")
+
+          # normální push; když mezitím někdo opět commitnul, zkus to ještě jednou po rebase
+          git push origin "$BRANCH" || (git pull --rebase origin "$BRANCH" && git push origin "$BRANCH")
+          # pokud máš branch protection a nechceš force, tuhle poslední řádku NEPOUŽÍVEJ
+          # git push --force-with-lease origin "$BRANCH" || true
