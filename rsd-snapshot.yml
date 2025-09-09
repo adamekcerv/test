@@ -1,0 +1,39 @@
+name: RSD snapshot to repo
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # každých 5 minut
+  workflow_dispatch:        # ruční spuštění
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Fetch XML snapshot
+        env:
+          RSD_USERNAME: ${{ secrets.RSD_USERNAME }}
+          RSD_PASSWORD: ${{ secrets.RSD_PASSWORD }}
+          RSD_URL: https://cloud.ostrava.cz/public.php/webdav/upload.xml
+          OUT_DIR: data
+        run: python fetch_rsd.py
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "snapshot: $(date -u +%FT%TZ)" || echo "No changes to commit"
+          git push
