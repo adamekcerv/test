@@ -2,7 +2,7 @@ name: RSD snapshot to repo
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # každých 5 minut
+    - cron: "*/5 * * * *"   # každých 5 minut (UTC)
   workflow_dispatch:        # ruční spuštění
 
 permissions:
@@ -12,10 +12,11 @@ jobs:
   snapshot:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
       - name: Set up Python
-      - uses: actions/setup-python@v5
+        uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
