@@ -8,7 +8,7 @@ on:
 permissions:
   contents: write
 
-# zabrání souběžným běhům na stejné větvi
+# Zabrání souběžným běhům na stejné větvi
 concurrency:
   group: rsd-snapshot-${{ github.ref }}
   cancel-in-progress: false
@@ -38,22 +38,31 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
-      - name: Fetch XML snapshot
+      - name: Fetch XML snapshot (robust, retries)
         env:
           RSD_USERNAME: ${{ secrets.RSD_USERNAME }}
           RSD_PASSWORD: ${{ secrets.RSD_PASSWORD }}
           RSD_URL: https://cloud.ostrava.cz/public.php/webdav/upload.xml
           OUT_DIR: data
-          SOFT_FAIL: "true"
+          SOFT_FAIL: "true"   # měkké selhání (nezlomí job při dočasném timeoutu)
         run: python -u fetch_rsd.py
 
-      - name: Commit & push (rebase-safe)
+      - name: Safe commit with rebase (stash-first)
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+
+          # ulož lokální změny a natahni poslední origin
+          git stash push --include-untracked -m "rsd-stash" || true
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git pull --rebase origin "$BRANCH" || (git rebase --abort; true)
+
+          # vrať naše změny, commitni a pushni
+          git stash pop || true
           git add -A
           git commit -m "snapshot: $(date -u +%FT%TZ)" || echo "Nothing to commit"
-          git pull --rebase origin "$BRANCH" || (git rebase --abort; true)
           git push origin "$BRANCH" || (git pull --rebase origin "$BRANCH" && git push origin "$BRANCH")
