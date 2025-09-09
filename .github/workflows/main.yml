@@ -29,7 +29,9 @@ jobs:
           RSD_PASSWORD: ${{ secrets.RSD_PASSWORD }}
           RSD_URL: https://cloud.ostrava.cz/public.php/webdav/upload.xml
           OUT_DIR: data
-        run: python fetch_rsd.py
+          SOFT_FAIL: "true"   # měkké selhání při výpadku
+        run: python -u fetch_rsd.py
+
 
       - name: Commit & push
         run: |
